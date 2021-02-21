@@ -1,8 +1,11 @@
 #include <world/world.hpp>
-
 #include <iostream>
-
+#include <glm/gtx/io.hpp>
 #include <algorithm>
+#include <deque>
+#include <limits>
+#include <unordered_set>
+#include <random>
 
 namespace {
 } // namespace anonymous
@@ -34,6 +37,48 @@ uint32_t world_data::calculate_lighting_for(glm::ivec2 pos) {
 		affected_set |= (1 << aff_idx);
 	};
 
+	struct light_prop {
+		glm::ivec2 pos;
+		glm::vec4 color;
+		float level;
+	};
+
+	auto propagate_light = [&add_light_at, this] (light_prop p) {
+		std::deque<light_prop> propagation_queue;
+		std::unordered_set<glm::ivec2> visited;
+
+		propagation_queue.push_back(p);
+
+		constexpr auto epsilon = std::numeric_limits<float>::epsilon();
+
+		while (propagation_queue.size()) {
+			auto p = propagation_queue.front();
+			propagation_queue.pop_front();
+
+			float v = p.level;
+			add_light_at(p.pos.x, p.pos.y, p.color * glm::vec4{v, v, v, 1.f});
+			visited.insert(p.pos);
+			v -= 0.12f;
+
+			if (v < epsilon)
+				continue;
+
+			constexpr glm::ivec2 dirs[] = {
+				{1, 0}, {-1, 0},
+				{0, 1}, {0, -1}
+			};
+
+			for (auto dir : dirs) {
+				if (auto pos = p.pos + dir; !visited.count(pos)) {
+					propagation_queue.push_back({pos, p.color, v});
+					visited.insert(pos);
+				}
+			}
+		}
+	};
+
+	std::deque<light_prop> light_queue;
+
 	for (int y = 0; y < chunk_data::height; y++) {
 		for (int x = 0; x < chunk_data::width; x++) {
 			// TODO: have world tile registry
@@ -42,22 +87,21 @@ uint32_t world_data::calculate_lighting_for(glm::ivec2 pos) {
 			if (tile != tile_id::torch && tile != tile_id::lava)
 				continue;
 
-			constexpr int radius = 10;
- 
-			for (int xx = -radius; xx <= radius; xx++) {
-				for (int yy = -radius; yy <= radius; yy++) {
-					int real_x = xx + x;
-					int real_y = yy + y;
+			auto color = tile == tile_id::torch
+				? glm::vec4{1.f, .64f, 0.f, 1.f}
+				: glm::vec4{1.f, .2f, 0.f, 1.f};
 
-					constexpr float max = (radius - 1) * (radius - 1) * 2 - 0.04f;
-					float dist = xx * xx + yy * yy + 10;
+			float v = tile == tile_id::torch ? 1.f : 0.75f;
 
-					float v = std::clamp((max - dist) / max, 0.f, 1.f);
-
-					add_light_at(real_x, real_y, {v, v, v, 1.f});
-				}
-			}
+			light_queue.push_back({{x, y}, color, v});
 		}
+	}
+
+	while (light_queue.size()) {
+		auto item = light_queue.front();
+		light_queue.pop_front();
+
+		propagate_light(item);
 	}
 
 	return affected_set;
