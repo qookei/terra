@@ -61,22 +61,14 @@ void chunk_view::generate_light_mesh() {
 
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
-			constexpr float w = 16, h = 16;
-			float tx = x * w, ty = y * h;
-
-			auto idx = x + y * width;
+			constexpr auto w = 16, h = 16;
+			auto tx = x * w + w / 2, ty = y * h + h / 2;
 
 			glm::vec4 rgba{};
-			for (auto &l : data_->lights)
-				rgba += l[idx].color;
+			for (int i = 0; i < 9; i++)
+				rgba += data_->light_at(i, x, y).color;
 
 			*vtx++ = vertex{{tx, ty}, {}, rgba};
-			*vtx++ = vertex{{tx + w, ty + h}, {}, rgba};
-			*vtx++ = vertex{{tx, ty + h}, {}, rgba};
-
-			*vtx++ = vertex{{tx, ty}, {}, rgba};
-			*vtx++ = vertex{{tx + w, ty}, {}, rgba};
-			*vtx++ = vertex{{tx + w, ty + h}, {}, rgba};
 		}
 	}
 }

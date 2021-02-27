@@ -6,18 +6,35 @@
 #include <limits>
 #include <unordered_set>
 #include <random>
+#include <glm/gtx/hash.hpp>
 
 namespace {
 } // namespace anonymous
 
 namespace world {
 
-uint32_t world_data::calculate_lighting_for(glm::ivec2 pos) {
+std::bitset<9> world_data::calculate_lighting_for(glm::ivec2 pos) {
 	auto chunk = get(pos);
 	if (!chunk)
 		return 0;
 
-	uint32_t affected_set = 0;
+	auto old_aff_set = chunk->light_affected_set;
+	old_aff_set.set(4); // This chunk is always affected
+	for (int i = 0; i < 9; i++) {
+		if (!old_aff_set.test(i))
+			continue;
+
+		int tx = (i % 3) - 1;
+		int ty = (i / 3) - 1;
+		auto other = get(pos + glm::ivec2{tx, ty});
+		if (!other)
+			continue;
+
+		for (int j = 0; j < chunk_data::width * chunk_data::height; j++)
+			other->lights[i + j * 9] = {};
+	}
+
+	std::bitset<9> affected_set = 0;
 
 	auto add_light_at = [this, &affected_set, pos] (int x, int y, glm::vec4 v) {
 		int tx = 0, ty = 0;
@@ -31,9 +48,8 @@ uint32_t world_data::calculate_lighting_for(glm::ivec2 pos) {
 		if (!chunk)
 			return;
 
-		auto idx = tile_pos.x + tile_pos.y * chunk_data::width;
-		auto aff_idx = (tx + 1) + (ty + 1) * 3;
-		chunk->lights[aff_idx][idx].color += v;
+		auto aff_idx = (tx + 1) + (ty + 1) * 3;;
+		chunk->light_at(aff_idx, tile_pos.x, tile_pos.y).color += v;
 		affected_set |= (1 << aff_idx);
 	};
 
@@ -104,7 +120,8 @@ uint32_t world_data::calculate_lighting_for(glm::ivec2 pos) {
 		propagate_light(item);
 	}
 
-	return affected_set;
+	chunk->light_affected_set = affected_set;
+	return affected_set | old_aff_set;
 }
 
 } // namespace world

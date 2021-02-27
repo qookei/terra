@@ -25,7 +25,7 @@ void add_random_chunk(glm::ivec2 pos, render::world_view &view, auto &mt) {
 	std::uniform_int_distribution<int> dist2{0, 99};
 	world::chunk_data cd;
 
-	for (size_t i = 0; i < 32 * 32; i++) {
+	for (size_t i = 0; i < world::chunk_data::width * world::chunk_data::height; i++) {
 		cd.front[i] = static_cast<world::tile_id>(dist(mt));
 
 		if ((cd.front[i] == world::tile_id::torch || cd.front[i] == world::tile_id::lava) && dist2(mt) > 2)
@@ -68,10 +68,11 @@ int main() {
 	client::world::load_default_tiles();
 
 	add_random_chunk({0, 0}, world_view, mt);
-	add_random_chunk({0, 1}, world_view, mt);
 	add_random_chunk({1, 0}, world_view, mt);
-	add_random_chunk({1, 1}, world_view, mt);
 	add_random_chunk({2, 0}, world_view, mt);
+
+	add_random_chunk({0, 1}, world_view, mt);
+	add_random_chunk({1, 1}, world_view, mt);
 	add_random_chunk({2, 1}, world_view, mt);
 
 	for (auto &[pos, _] : world) {
@@ -86,12 +87,12 @@ int main() {
 
 	gl::mesh light_mesh;
 	render::vertex vertices[] = {
-		{{0, 0}, {0, 0, 0}, {1, 1, 1, 1}},
-		{{1280, 720}, {1, 1, 0}, {1, 1, 1, 1}},
-		{{0, 720}, {0, 1, 0}, {1, 1, 1, 1}},
-		{{0, 0}, {0, 0, 0}, {1, 1, 1, 1}},
-		{{1280, 0}, {1, 0, 0}, {1, 1, 1, 1}},
-		{{1280, 720}, {1, 1, 0}, {1, 1, 1, 1}},
+		{{-1, -1}, {0, 0, 0}, {}},
+		{{ 1,  1}, {1, 1, 0}, {}},
+		{{-1,  1}, {0, 1, 0}, {}},
+		{{-1, -1}, {0, 0, 0}, {}},
+		{{ 1, -1}, {1, 0, 0}, {}},
+		{{ 1,  1}, {1, 1, 0}, {}},
 	};
 	light_mesh.vbo().store_regenerate(vertices, sizeof(render::vertex) * 6, GL_STATIC_DRAW);
 
@@ -127,7 +128,6 @@ int main() {
 
 		glBlendFunc(GL_DST_COLOR, GL_ZERO);
 		light_apply_prog.use();
-		light_apply_prog.set_uniform("ortho", ortho);
 		light_fb.bind_ca_texture();
 		light_mesh.render(6);
 

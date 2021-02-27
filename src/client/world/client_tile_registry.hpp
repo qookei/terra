@@ -30,7 +30,7 @@ struct tile_registry {
 	}
 
 	const client_tile_info &get(tile_id id) const {
-		return tiles_.at(id);
+		return tiles_.at(static_cast<int>(id));
 	}
 
 	void register_tile(tile_id id, client_tile_info &&ti) {
@@ -39,13 +39,15 @@ struct tile_registry {
 		if (ti.fg_path.size())
 			n_textures_++;
 
-		tiles_.emplace(id, std::move(ti));
+		//tiles_.emplace(id, std::move(ti));
+		tiles_[static_cast<int>(id)] = std::move(ti);
 	}
 
 	void finalize() {
 		tex_array_.generate(16, 16, n_textures_);
 
-		for (auto &[_, ti] : tiles_) {
+		//for (auto &[_, ti] : tiles_) {
+		for (auto &ti : tiles_) {
 			if (ti.bg_path.size())
 				ti.bg_idx = tex_array_.add_texture(ti.bg_path) + 1;
 			if (ti.fg_path.size())
@@ -61,7 +63,8 @@ private:
 	tile_registry()
 	: tiles_{}, tex_array_{}, n_textures_{} { }
 
-	std::map<tile_id, client_tile_info> tiles_;
+	std::array<client_tile_info, 17> tiles_;
+	//std::map<tile_id, client_tile_info> tiles_;
 	gl::texture_array tex_array_;
 
 	int n_textures_;

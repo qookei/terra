@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <glm/vec2.hpp>
 #include <glm/gtx/hash.hpp>
+#include <bitset>
 
 namespace world {
 
@@ -30,8 +31,8 @@ struct world_data {
 	}
 
 	glm::ivec2 chunk_at(glm::ivec2 world_pos) const {
-		return {world_pos.x / chunk_data::width,
-			world_pos.y / chunk_data::height};
+		return {static_cast<unsigned int>(world_pos.x) % chunk_data::width,
+			static_cast<unsigned int>(world_pos.y) % chunk_data::height};
 	}
 
 	glm::ivec2 tile_at(glm::ivec2 world_pos) const {
@@ -40,7 +41,7 @@ struct world_data {
 	}
 
 	// Returns bit set of affected chunks
-	uint32_t calculate_lighting_for(glm::ivec2 pos);
+	std::bitset<9> calculate_lighting_for(glm::ivec2 pos);
 
 	auto begin() const {
 		return chunks.begin();

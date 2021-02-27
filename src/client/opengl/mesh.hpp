@@ -29,12 +29,14 @@ struct mesh {
 		return *this;
 	}
 
+	template <GLenum Mode = GL_TRIANGLES>
 	void render() const {
-		vao_.render(vbo_.size() / sizeof(render::vertex));
+		vao_.render<Mode>(vbo_.size() / sizeof(render::vertex));
 	}
 
+	template <GLenum Mode = GL_TRIANGLES>
 	void render(size_t n_vertices) const {
-		vao_.render(n_vertices);
+		vao_.render<Mode>(n_vertices);
 	}
 
 	vertex_buffer &vbo() {

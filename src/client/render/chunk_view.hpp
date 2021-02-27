@@ -12,7 +12,7 @@ struct chunk_view {
 	static constexpr int height = world::chunk_data::height;
 	static constexpr int layers = 2;
 	static constexpr int tile_vertices = width * height * layers * 6 * 2;
-	static constexpr int light_vertices = width * height * 6;
+	static constexpr int light_vertices = width * height;
 
 	chunk_view(world::chunk_data *data)
 	: tile_mesh_{}, light_mesh_{}, data_{data}, used_vertices_{} {
@@ -28,7 +28,8 @@ struct chunk_view {
 	}
 
 	void render_light() const {
-		light_mesh_.render(light_vertices);
+		glPointSize(16);
+		light_mesh_.render<GL_POINTS>(light_vertices);
 	}
 
 private:
