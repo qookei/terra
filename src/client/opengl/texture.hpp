@@ -42,6 +42,9 @@ struct texture_array {
 		glTextureParameteri(id_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 		glTextureStorage3D(id_, 1, GL_RGBA8, width, height, max_textures);
+		width_ = width;
+		height_ = height;
+		max_textures_ = max_textures;
 	}
 
 	void bind() {
@@ -52,6 +55,9 @@ struct texture_array {
 		int w, h, n;
 
 		if (auto d = stbi_load(path.data(), &w, &h, &n, 4); d) {
+			assert(w == width_);
+			assert(h == height_);
+			assert(max_textures_ > z_);
 			glTextureSubImage3D(id_, 0, 0, 0, z_, w, h, 1,
 					GL_RGBA, GL_UNSIGNED_BYTE, d);
 			stbi_image_free(d);
@@ -127,6 +133,14 @@ struct texture2d {
 			std::cerr << __func__ << ": failed to load \"" << path << "\"" << std::endl;
 			assert(!"failed to load texture");
 		}
+	}
+
+	int width() const {
+		return width_;
+	}
+
+	int height() const {
+		return height_;
 	}
 
 private:

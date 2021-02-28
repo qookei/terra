@@ -16,7 +16,7 @@ window::window() {
 
 	context_ = SDL_GL_CreateContext(window_);
 
-	SDL_GL_SetSwapInterval(1);
+	SDL_GL_SetSwapInterval(0);
 }
 
 window::~window() {
