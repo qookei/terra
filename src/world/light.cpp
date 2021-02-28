@@ -1,14 +1,36 @@
 #include <world/world.hpp>
-#include <iostream>
-#include <glm/gtx/io.hpp>
 #include <algorithm>
 #include <deque>
 #include <limits>
-#include <unordered_set>
-#include <random>
 #include <glm/gtx/hash.hpp>
 
 namespace {
+	inline glm::ivec2 tile_to_neigh_offset(glm::ivec2 pos) {
+		int tx = 0, ty = 0;
+		if (pos.x < 0) tx = -1;
+		else if (pos.x >= world::chunk_data::width) tx = 1;
+		if (pos.y < 0) ty = -1;
+		else if (pos.y >= world::chunk_data::height) ty = 1;
+
+		return {tx, ty};
+	}
+
+	inline int tile_to_neigh_idx(glm::ivec2 pos) {
+		auto off = tile_to_neigh_offset(pos);
+
+		return (off.x + 1) + (off.y + 1) * 3;
+	}
+
+	// TODO: further optimization could be done by checking neighboring chunks
+	inline bool is_not_surrounded(world::chunk_data *chunk, glm::ivec2 pos, world::tile_id id) {
+		if (pos.x == 0 || pos.x == world::chunk_data::width - 1) return true;
+		if (pos.y == 0 || pos.y == world::chunk_data::height - 1) return true;
+
+		return chunk->front[(pos.x - 1) + pos.y * world::chunk_data::width] != id
+			|| chunk->front[(pos.x + 1) + pos.y * world::chunk_data::width] != id
+			|| chunk->front[pos.x + (pos.y - 1) * world::chunk_data::width] != id
+			|| chunk->front[pos.x + (pos.y + 1) * world::chunk_data::width] != id;
+	}
 } // namespace anonymous
 
 namespace world {
@@ -36,88 +58,122 @@ std::bitset<9> world_data::calculate_lighting_for(glm::ivec2 pos) {
 
 	std::bitset<9> affected_set = 0;
 
-	auto add_light_at = [this, &affected_set, pos] (int x, int y, glm::vec4 v) {
-		int tx = 0, ty = 0;
-		if (x < 0) tx = -1;
-		else if (x >= chunk_data::width) tx = 1;
-		if (y < 0) ty = -1;
-		else if (y >= chunk_data::height) ty = 1;
+	auto add_light_at = [this, &affected_set, pos] (glm::ivec2 put_pos,
+			glm::vec4 color, float level) {
+		auto off = tile_to_neigh_offset(put_pos);
+		auto aff_idx = tile_to_neigh_idx(put_pos);
 
-		auto tile_pos = tile_at({x, y});
-		auto chunk = get(pos + glm::ivec2{tx, ty});
+		auto tile_pos = tile_at(put_pos);
+		auto chunk = get(pos + off);
 		if (!chunk)
 			return;
 
-		auto aff_idx = (tx + 1) + (ty + 1) * 3;;
-		chunk->light_at(aff_idx, tile_pos.x, tile_pos.y).color += v;
-		affected_set |= (1 << aff_idx);
+		chunk->light_at(aff_idx, tile_pos.x, tile_pos.y).color += color * level;
+		chunk->light_at(aff_idx, tile_pos.x, tile_pos.y).level += level;
+		affected_set.set(aff_idx);
 	};
 
 	struct light_prop {
+		glm::ivec2 origin;
+		tile_id origin_tile;
 		glm::ivec2 pos;
 		glm::vec4 color;
 		float level;
+		float dropoff_amp;
 	};
 
-	auto propagate_light = [&add_light_at, this] (light_prop p) {
-		std::deque<light_prop> propagation_queue;
-		std::unordered_set<glm::ivec2> visited;
-
-		propagation_queue.push_back(p);
-
-		constexpr auto epsilon = std::numeric_limits<float>::epsilon();
-
-		while (propagation_queue.size()) {
-			auto p = propagation_queue.front();
-			propagation_queue.pop_front();
-
-			float v = p.level;
-			add_light_at(p.pos.x, p.pos.y, p.color * glm::vec4{v, v, v, 1.f});
-			visited.insert(p.pos);
-			v -= 0.12f;
-
-			if (v < epsilon)
-				continue;
-
-			constexpr glm::ivec2 dirs[] = {
-				{1, 0}, {-1, 0},
-				{0, 1}, {0, -1}
-			};
-
-			for (auto dir : dirs) {
-				if (auto pos = p.pos + dir; !visited.count(pos)) {
-					propagation_queue.push_back({pos, p.color, v});
-					visited.insert(pos);
-				}
-			}
-		}
-	};
-
-	std::deque<light_prop> light_queue;
+	std::array<
+		std::bitset<
+			chunk_data::width * chunk_data::height
+		>,
+		chunk_data::width * 3 * chunk_data::height * 3
+	> visited{};
+	constexpr auto epsilon = std::numeric_limits<float>::epsilon();
+	std::deque<light_prop> propagation_queue;
 
 	for (int y = 0; y < chunk_data::height; y++) {
 		for (int x = 0; x < chunk_data::width; x++) {
-			// TODO: have world tile registry
 			auto idx = x + y * chunk_data::width;
 			auto tile = chunk->front[idx];
-			if (tile != tile_id::torch && tile != tile_id::lava)
+
+			glm::vec4 color{};
+			float level = 0;
+			float dropoff_amp = 1.f;
+
+			// TODO: have world tile registry
+			if (tile == tile_id::torch) {
+				color = glm::vec4{1.f, .64f, 0.f, 1.f};
+				level = 1.f;
+			} else if (tile == tile_id::lava) {
+				color = glm::vec4{1.f, .2f, 0.f, 1.f};
+				level = 0.75f;
+			} else if (tile == tile_id::air && pos.y < 1) {
+				color = glm::vec4{1.f, 1.f, 1.f, 1.f};
+				level = local_time();
+				dropoff_amp = 1.5f;
+			} else {
 				continue;
+			}
 
-			auto color = tile == tile_id::torch
-				? glm::vec4{1.f, .64f, 0.f, 1.f}
-				: glm::vec4{1.f, .2f, 0.f, 1.f};
+			if (is_not_surrounded(chunk, {x, y}, tile)) {
+				propagation_queue.push_back({{x, y}, tile,
+						{x, y}, color, level,
+						dropoff_amp});
+			} else {
+				add_light_at({x, y}, color, level);
+			}
 
-			float v = tile == tile_id::torch ? 1.f : 0.75f;
-
-			light_queue.push_back({{x, y}, color, v});
+			auto visited_idx = (chunk_data::width + x)
+				+ (chunk_data::height + y) * chunk_data::width * 3;
+			visited[visited_idx].set(idx);
 		}
 	}
 
-	while (light_queue.size()) {
-		auto item = light_queue.front();
-		light_queue.pop_front();
+	while (propagation_queue.size()) {
+		auto item = propagation_queue.front();
+		propagation_queue.pop_front();
 
-		propagate_light(item);
+		auto off = tile_to_neigh_offset(item.pos);
+		auto tile_pos = tile_at(item.pos);
+		auto chunk = get(pos + off);
+		if (!chunk)
+			continue;
+
+		auto tile = chunk->front[tile_pos.x + tile_pos.y * chunk_data::width];
+
+		// Don't propagate light from air blocks onto other air blocks
+		if (item.pos != item.origin && item.origin_tile == tile_id::air
+				&& tile == item.origin_tile)
+			continue;
+
+		float dropoff = 0.12f;
+		if (tile == tile_id::air && (pos + off).y >= 1)
+			dropoff = 0.05f;
+
+		add_light_at(item.pos, item.color, item.level);
+		item.level -= dropoff * item.dropoff_amp;
+
+		if (item.level < epsilon)
+			continue;
+
+		constexpr glm::ivec2 dirs[] = {
+			{1, 0}, {-1, 0},
+			{0, 1}, {0, -1}
+		};
+
+		for (auto dir : dirs) {
+			auto pos = item.pos + dir;
+			auto origin_idx = item.origin.x + item.origin.y * chunk_data::width;
+			auto item_idx = (chunk_data::width + pos.x)
+				+ (chunk_data::height + pos.y) * chunk_data::width * 3;
+
+			if (!visited[item_idx].test(origin_idx)) {
+				propagation_queue.push_back({item.origin,
+						item.origin_tile, pos, item.color,
+						item.level, item.dropoff_amp});
+				visited[item_idx].set(origin_idx);
+			}
+		}
 	}
 
 	chunk->light_affected_set = affected_set;

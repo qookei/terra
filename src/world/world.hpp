@@ -59,8 +59,13 @@ struct world_data {
 		return chunks.end();
 	}
 
+	float &local_time() {
+		return local_time_;
+	}
+
 private:
 	std::unordered_map<glm::ivec2, chunk_data> chunks;
+	float local_time_;
 };
 
 } // namespace world

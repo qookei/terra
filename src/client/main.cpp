@@ -20,17 +20,14 @@
 #include <random>
 
 void add_random_chunk(glm::ivec2 pos, render::world_view &view, auto &mt) {
-	std::uniform_int_distribution<int> dist{0, 15};
-	std::uniform_int_distribution<int> dist3{0, 11};
-	std::uniform_int_distribution<int> dist2{0, 99};
+	std::discrete_distribution<int> dist{1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., .2, .2, .2, 1., 1.};
 	world::chunk_data cd;
 
 	for (size_t i = 0; i < world::chunk_data::width * world::chunk_data::height; i++) {
+		if (pos.y < 1 && i < 512)
+			continue;
+
 		cd.front[i] = static_cast<world::tile_id>(dist(mt));
-
-		if ((cd.front[i] == world::tile_id::torch || cd.front[i] == world::tile_id::lava) && dist2(mt) > 2)
-			cd.front[i] = static_cast<world::tile_id>(dist3(mt));
-
 		cd.back[i] = static_cast<world::tile_id>(dist(mt));
 	}
 
@@ -98,6 +95,8 @@ int main() {
 
 	auto &tr = client::world::tile_registry::get();
 
+	float time = 0;
+
 	bool loop = true;
 	while(loop) {
 		SDL_Event ev;
@@ -105,6 +104,18 @@ int main() {
 			if (ev.type == SDL_QUIT)
 				loop = false;
 		}
+
+		world.local_time() = (std::sin(time) + 1.f) / 2.f;
+		time += 0.01f;
+
+		world_view.queue_light_update({0, 0});
+		world_view.queue_light_update({1, 0});
+		world_view.queue_light_update({2, 0});
+		world_view.queue_light_update({0, 1});
+		world_view.queue_light_update({1, 1});
+		world_view.queue_light_update({2, 1});
+
+		world_view.do_queued_light_updates();
 
 		glBlendFunc(GL_ONE, GL_ONE);
 
